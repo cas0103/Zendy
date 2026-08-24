@@ -81,6 +81,50 @@ ordersRouter.post("/orders", async (req, res) => {
   }
 });
 
+ordersRouter.patch("/orders/:id/pay", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const current = await client.query("SELECT status FROM orders WHERE id = $1 FOR UPDATE", [
+      req.params.id,
+    ]);
+    if (current.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Bestelling niet gevonden" });
+    }
+    if (current.rows[0].status !== "AANGEMAAKT") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: `Bestelling kan niet betaald worden vanuit status ${current.rows[0].status}`,
+      });
+    }
+
+    const orderResult = await client.query(
+      `UPDATE orders
+       SET status = 'BETAALD', payment_status = 'paid', updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id]
+    );
+
+    await client.query(
+      `INSERT INTO order_status_history (order_id, status, changed_by)
+       VALUES ($1, 'BETAALD', 'store')`,
+      [req.params.id]
+    );
+
+    await client.query("COMMIT");
+    res.json(orderResult.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    res.status(500).json({ error: "Kon betaling niet verwerken" });
+  } finally {
+    client.release();
+  }
+});
+
 ordersRouter.get("/orders/:id", async (req, res) => {
   const result = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   if (result.rows.length === 0) {
