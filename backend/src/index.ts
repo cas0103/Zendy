@@ -2,12 +2,18 @@ import "dotenv/config";
 import express from "express";
 import { pool } from "./db";
 import { ordersRouter } from "./orders";
+import { couriersRouter } from "./couriers";
+import { offersRouter } from "./offers";
+import { storesRouter } from "./stores";
 
 const app = express();
 const port = process.env.PORT ?? 3000;
 
 app.use(express.json());
 app.use(ordersRouter);
+app.use(couriersRouter);
+app.use(offersRouter);
+app.use(storesRouter);
 
 app.get("/health", async (_req, res) => {
   try {
