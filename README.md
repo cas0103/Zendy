@@ -9,12 +9,29 @@ Monorepo met drie onderdelen:
 - `courier-app/` — React Native + Expo koeriers-app
 - `store-dashboard/` — Next.js winkeldashboard
 
-## Backend starten (lokaal)
+## Alles starten: de makkelijke manier
+
+Vereist eenmalig: [Node.js](https://nodejs.org) en [PostgreSQL](https://www.postgresql.org/download)
+geïnstalleerd op je computer. Daarna:
+
+```bash
+bash start-zenddy.sh
+```
+
+Dit ene script regelt alles: database aanmaken, pakketten installeren, `.env`-bestanden met
+automatisch gegenereerde sleutels aanmaken, databasetabellen bouwen, een testwinkel +
+testbestelling klaarzetten, en de backend + het winkeldashboard opstarten. Daarna kun je naar
+`http://localhost:3001` in je browser voor het winkeldashboard. Stoppen: Ctrl+C in dat venster.
+
+De koeriers-app start je apart (zie `courier-app/README.md`), omdat die een extra stap (Expo)
+nodig heeft.
+
+## Backend starten (losse stappen, voor als je het zelf wil doen)
 
 ```bash
 cd backend
 npm install
-cp .env.example .env   # pas DATABASE_URL aan, en vul JWT_SECRET en ADMIN_API_KEY met iets willekeurigs
+cp .env.example .env   # pas DATABASE_URL aan, en vul JWT_SECRET, ADMIN_API_KEY en ENCRYPTION_KEY met iets willekeurigs
 npm run migrate:up     # database-schema opzetten
 npm run dev            # start op http://localhost:3000
 curl http://localhost:3000/health
