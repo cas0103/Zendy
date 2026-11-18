@@ -54,3 +54,20 @@ gebruikt geen browser en valt hier niet onder.
   toont dit automatisch op de detailpagina van een bestelling.
 - **Winkeldashboard-acties**: de detailpagina van een bestelling heeft nu een knop
   "Bevestig ophalen door koerier" zodra de status dat toelaat.
+- **Voorraadkoppelingen (Shopify/WooCommerce)**: één interne standaard
+  ("op voorraad: ja/nee"), met per platform een eigen adapter
+  (`backend/src/inventory/`). Een winkel koppelt via
+  `POST /stores/me/inventory-integration` (credentials worden versleuteld
+  opgeslagen met `ENCRYPTION_KEY`), en de webshop-checkout kan
+  `GET /stores/me/inventory-check?sku=...` aanroepen om te bepalen of Zenddy
+  getoond mag worden. Er is ook een `other`/mock-adapter om zonder echte
+  webshop te testen.
+
+  **Belangrijke kanttekening:** de Shopify- en WooCommerce-adapters zijn
+  geschreven volgens de echte API's van beide platformen, maar zijn hier
+  nooit tegen een echte winkel getest (ik heb geen Shopify/WooCommerce-winkel
+  tot mijn beschikking). Getest is wel: de encryptie/decryptie, de mock-adapter
+  volledig end-to-end, en de foutafhandeling wanneer een koppeling niet werkt
+  (nette 502 + status wordt 'error', geen crash). Voordat dit echt gebruikt
+  wordt, moet het tegen een testwinkel van beide platformen gecontroleerd
+  worden.

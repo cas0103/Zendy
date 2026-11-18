@@ -8,6 +8,7 @@ import { offersRouter } from "./offers";
 import { storesRouter } from "./stores";
 import { payoutsRouter } from "./payouts";
 import { ratingsRouter } from "./ratings";
+import { inventoryIntegrationsRouter } from "./inventoryIntegrations";
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -31,6 +32,7 @@ app.use(offersRouter);
 app.use(storesRouter);
 app.use(payoutsRouter);
 app.use(ratingsRouter);
+app.use(inventoryIntegrationsRouter);
 
 app.get("/health", async (_req, res) => {
   try {
