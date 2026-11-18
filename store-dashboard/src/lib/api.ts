@@ -42,3 +42,16 @@ export async function getOrderHistory(id: string): Promise<OrderHistoryEntry[]> 
   if (!res.ok) throw new Error("Kon geschiedenis niet ophalen");
   return res.json();
 }
+
+export type CourierLocation =
+  | { available: false }
+  | { available: true; latitude: number | null; longitude: number | null; order_status: string };
+
+export async function getCourierLocation(id: string): Promise<CourierLocation> {
+  const res = await fetch(`${API_URL}/orders/${id}/courier-location`, {
+    cache: "no-store",
+    headers: authHeaders,
+  });
+  if (!res.ok) throw new Error("Kon locatie niet ophalen");
+  return res.json();
+}

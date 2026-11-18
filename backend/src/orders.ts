@@ -45,8 +45,8 @@ ordersRouter.post("/orders", requireStoreAuth, async (req, res) => {
         store_id, external_order_ref, status, customer_name, customer_phone,
         delivery_address, delivery_latitude, delivery_longitude,
         item_description, item_value, delivery_fee_paid_by_customer, store_fee,
-        payment_status
-      ) VALUES ($1, $2, 'AANGEMAAKT', $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
+        courier_payout, payment_status
+      ) VALUES ($1, $2, 'AANGEMAAKT', $3, $4, $5, $6, $7, $8, $9, $10, $11, $10, 'pending')
       RETURNING *`,
       [
         req.storeId,
@@ -253,6 +253,11 @@ ordersRouter.patch("/orders/:id/delivered", requireCourierAuth, async (req, res)
       current.rows[0].courier_id,
     ]);
 
+    await client.query(
+      `INSERT INTO payouts (courier_id, order_id, amount, status) VALUES ($1, $2, $3, 'pending')`,
+      [current.rows[0].courier_id, req.params.id, delivered.rows[0].courier_payout ?? 0]
+    );
+
     await client.query("COMMIT");
     res.json(delivered.rows[0]);
   } catch (error) {
@@ -299,6 +304,31 @@ ordersRouter.get("/orders/:id", identifyStoreOrCourier, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+ordersRouter.get("/orders/:id/courier-location", identifyStoreOrCourier, async (req, res) => {
+  const result = await pool.query(
+    `SELECT o.store_id, o.courier_id, o.status, c.current_latitude, c.current_longitude
+     FROM orders o LEFT JOIN couriers c ON c.id = o.courier_id
+     WHERE o.id = $1`,
+    [req.params.id]
+  );
+  if (
+    result.rows.length === 0 ||
+    (result.rows[0].store_id !== req.storeId && result.rows[0].courier_id !== req.courierId)
+  ) {
+    return res.status(404).json({ error: "Bestelling niet gevonden" });
+  }
+  const row = result.rows[0];
+  if (!row.courier_id) {
+    return res.json({ available: false });
+  }
+  res.json({
+    available: true,
+    latitude: row.current_latitude,
+    longitude: row.current_longitude,
+    order_status: row.status,
+  });
 });
 
 ordersRouter.get("/orders/:id/history", identifyStoreOrCourier, async (req, res) => {

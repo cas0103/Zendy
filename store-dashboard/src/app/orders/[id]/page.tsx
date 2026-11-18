@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOrder, getOrderHistory } from "@/lib/api";
+import { getOrder, getOrderHistory, getCourierLocation } from "@/lib/api";
+import { ConfirmPickupButton } from "./ConfirmPickupButton";
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
   const order = await getOrder(params.id);
   if (!order) notFound();
   const history = await getOrderHistory(params.id);
+  const location = await getCourierLocation(params.id);
 
   return (
     <div>
@@ -27,6 +29,15 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         <p>
           <strong>Betaalstatus:</strong> {order.payment_status}
         </p>
+
+        {location.available && location.latitude != null && (
+          <p>
+            <strong>Live locatie koerier:</strong> {location.latitude.toFixed(5)},{" "}
+            {location.longitude?.toFixed(5)}
+          </p>
+        )}
+
+        {order.status === "KLAARSTAAN_VOOR_OPHALEN" && <ConfirmPickupButton orderId={order.id} />}
       </div>
 
       <h2 style={{ fontSize: 18, marginBottom: 8 }}>Statusgeschiedenis</h2>
