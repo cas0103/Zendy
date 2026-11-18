@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { pool } from "./db";
 import { ordersRouter } from "./orders";
 import { couriersRouter } from "./couriers";
@@ -9,6 +10,7 @@ import { storesRouter } from "./stores";
 const app = express();
 const port = process.env.PORT ?? 3000;
 
+app.use(cors());
 app.use(express.json());
 app.use(ordersRouter);
 app.use(couriersRouter);

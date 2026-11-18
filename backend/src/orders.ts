@@ -264,6 +264,17 @@ ordersRouter.patch("/orders/:id/delivered", requireCourierAuth, async (req, res)
   }
 });
 
+ordersRouter.get("/couriers/me/active-order", requireCourierAuth, async (req, res) => {
+  const result = await pool.query(
+    `SELECT * FROM orders
+     WHERE courier_id = $1
+       AND status IN ('KOERIER_TOEGEWEZEN', 'KLAARSTAAN_VOOR_OPHALEN', 'OPGEHAALD', 'ONDERWEG_NAAR_KLANT')
+     ORDER BY updated_at DESC LIMIT 1`,
+    [req.courierId]
+  );
+  res.json(result.rows[0] ?? null);
+});
+
 ordersRouter.get("/orders", requireStoreAuth, async (req, res) => {
   const result = await pool.query("SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC", [
     req.storeId,

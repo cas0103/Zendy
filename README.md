@@ -6,7 +6,7 @@ Bezorgplatform voor fashion (bezorging binnen 30-60 min). Zie `ZENDDY_PROJECT_CO
 
 Monorepo met drie onderdelen:
 - `backend/` — Node.js + TypeScript API + PostgreSQL (in ontwikkeling)
-- `courier-app/` — React Native + Expo koeriers-app (nog niet gestart)
+- `courier-app/` — React Native + Expo koeriers-app
 - `store-dashboard/` — Next.js winkeldashboard (nog niet gestart)
 
 ## Backend starten (lokaal)
