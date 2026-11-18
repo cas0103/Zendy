@@ -129,7 +129,34 @@ ordersRouter.patch("/orders/:id/pay", requireStoreAuth, async (req, res) => {
   }
 });
 
-ordersRouter.patch("/orders/:id/customer-choice", requireStoreAuth, async (req, res) => {
+/** Beperkte, publieke weergave voor de klant-zonder-account (beslisscherm na checkout). */
+ordersRouter.get("/orders/:id/customer-status", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const order = await applyExpiry(client, req.params.id);
+    await client.query("COMMIT");
+    if (!order) {
+      return res.status(404).json({ error: "Bestelling niet gevonden" });
+    }
+    res.json({
+      status: order.status,
+      customer_choice_expires_at: order.customer_choice_expires_at,
+      external_order_ref: order.external_order_ref,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    res.status(500).json({ error: "Kon status niet ophalen" });
+  } finally {
+    client.release();
+  }
+});
+
+// Geen login nodig: de klant heeft geen account (zie projectcontext). Het
+// bestelling-ID is een niet-raadbare UUID en doet hier dienst als toegangssleutel
+// voor de link die de klant krijgt wanneer er geen koerier gevonden is.
+ordersRouter.patch("/orders/:id/customer-choice", async (req, res) => {
   const { choice } = req.body;
   if (!["other_shipping", "cancel"].includes(choice)) {
     return res.status(400).json({ error: "choice moet 'other_shipping' of 'cancel' zijn" });
@@ -139,7 +166,7 @@ ordersRouter.patch("/orders/:id/customer-choice", requireStoreAuth, async (req, 
   try {
     await client.query("BEGIN");
     let order = await applyExpiry(client, req.params.id);
-    if (!order || order.store_id !== req.storeId) {
+    if (!order) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
