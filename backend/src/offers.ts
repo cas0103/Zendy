@@ -1,10 +1,19 @@
 import { Router } from "express";
 import { pool } from "./db";
 import { applyExpiry, offerToNextCourier, logHistory } from "./orderFlow";
+import { requireCourierAuth, requireStoreAuth } from "./auth";
 
 export const offersRouter = Router();
 
-offersRouter.patch("/courier-offers/:id/respond", async (req, res) => {
+offersRouter.get("/couriers/me/offers", requireCourierAuth, async (req, res) => {
+  const result = await pool.query(
+    `SELECT * FROM courier_offers WHERE courier_id = $1 AND response = 'pending' ORDER BY offered_at ASC`,
+    [req.courierId]
+  );
+  res.json(result.rows);
+});
+
+offersRouter.patch("/courier-offers/:id/respond", requireCourierAuth, async (req, res) => {
   const { response } = req.body;
   if (!["accepted", "declined"].includes(response)) {
     return res.status(400).json({ error: "response moet 'accepted' of 'declined' zijn" });
@@ -17,7 +26,7 @@ offersRouter.patch("/courier-offers/:id/respond", async (req, res) => {
     const offerResult = await client.query("SELECT * FROM courier_offers WHERE id = $1 FOR UPDATE", [
       req.params.id,
     ]);
-    if (offerResult.rows.length === 0) {
+    if (offerResult.rows.length === 0 || offerResult.rows[0].courier_id !== req.courierId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Aanbod niet gevonden" });
     }
@@ -81,7 +90,11 @@ offersRouter.patch("/courier-offers/:id/respond", async (req, res) => {
   }
 });
 
-offersRouter.get("/orders/:orderId/offers", async (req, res) => {
+offersRouter.get("/orders/:orderId/offers", requireStoreAuth, async (req, res) => {
+  const order = await pool.query("SELECT store_id FROM orders WHERE id = $1", [req.params.orderId]);
+  if (order.rows.length === 0 || order.rows[0].store_id !== req.storeId) {
+    return res.status(404).json({ error: "Bestelling niet gevonden" });
+  }
   const result = await pool.query(
     "SELECT * FROM courier_offers WHERE order_id = $1 ORDER BY offered_at ASC",
     [req.params.orderId]

@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { pool } from "./db";
 import { applyExpiry, offerToNextCourier, startCourierSearch, logHistory } from "./orderFlow";
+import { identifyStoreOrCourier, requireCourierAuth, requireStoreAuth } from "./auth";
 
 export const ordersRouter = Router();
 
-ordersRouter.post("/orders", async (req, res) => {
+ordersRouter.post("/orders", requireStoreAuth, async (req, res) => {
   const {
-    store_id,
     external_order_ref,
     customer_name,
     customer_phone,
@@ -20,7 +20,6 @@ ordersRouter.post("/orders", async (req, res) => {
   } = req.body;
 
   const requiredFields = {
-    store_id,
     external_order_ref,
     customer_name,
     customer_phone,
@@ -50,7 +49,7 @@ ordersRouter.post("/orders", async (req, res) => {
       ) VALUES ($1, $2, 'AANGEMAAKT', $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
       RETURNING *`,
       [
-        store_id,
+        req.storeId,
         external_order_ref,
         customer_name,
         customer_phone,
@@ -82,15 +81,15 @@ ordersRouter.post("/orders", async (req, res) => {
   }
 });
 
-ordersRouter.patch("/orders/:id/pay", async (req, res) => {
+ordersRouter.patch("/orders/:id/pay", requireStoreAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const current = await client.query("SELECT status FROM orders WHERE id = $1 FOR UPDATE", [
+    const current = await client.query("SELECT * FROM orders WHERE id = $1 FOR UPDATE", [
       req.params.id,
     ]);
-    if (current.rows.length === 0) {
+    if (current.rows.length === 0 || current.rows[0].store_id !== req.storeId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
@@ -130,7 +129,7 @@ ordersRouter.patch("/orders/:id/pay", async (req, res) => {
   }
 });
 
-ordersRouter.patch("/orders/:id/customer-choice", async (req, res) => {
+ordersRouter.patch("/orders/:id/customer-choice", requireStoreAuth, async (req, res) => {
   const { choice } = req.body;
   if (!["other_shipping", "cancel"].includes(choice)) {
     return res.status(400).json({ error: "choice moet 'other_shipping' of 'cancel' zijn" });
@@ -140,7 +139,7 @@ ordersRouter.patch("/orders/:id/customer-choice", async (req, res) => {
   try {
     await client.query("BEGIN");
     let order = await applyExpiry(client, req.params.id);
-    if (!order) {
+    if (!order || order.store_id !== req.storeId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
@@ -185,14 +184,14 @@ ordersRouter.patch("/orders/:id/customer-choice", async (req, res) => {
   }
 });
 
-ordersRouter.patch("/orders/:id/picked-up", async (req, res) => {
+ordersRouter.patch("/orders/:id/picked-up", requireStoreAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const current = await client.query("SELECT status FROM orders WHERE id = $1 FOR UPDATE", [
+    const current = await client.query("SELECT * FROM orders WHERE id = $1 FOR UPDATE", [
       req.params.id,
     ]);
-    if (current.rows.length === 0) {
+    if (current.rows.length === 0 || current.rows[0].store_id !== req.storeId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
@@ -226,14 +225,14 @@ ordersRouter.patch("/orders/:id/picked-up", async (req, res) => {
   }
 });
 
-ordersRouter.patch("/orders/:id/delivered", async (req, res) => {
+ordersRouter.patch("/orders/:id/delivered", requireCourierAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const current = await client.query("SELECT * FROM orders WHERE id = $1 FOR UPDATE", [
       req.params.id,
     ]);
-    if (current.rows.length === 0) {
+    if (current.rows.length === 0 || current.rows[0].courier_id !== req.courierId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
@@ -250,10 +249,9 @@ ordersRouter.patch("/orders/:id/delivered", async (req, res) => {
     );
     await logHistory(client, req.params.id, "AFGELEVERD", "courier");
 
-    await client.query(
-      `UPDATE couriers SET status = 'online_available' WHERE id = $1`,
-      [current.rows[0].courier_id]
-    );
+    await client.query(`UPDATE couriers SET status = 'online_available' WHERE id = $1`, [
+      current.rows[0].courier_id,
+    ]);
 
     await client.query("COMMIT");
     res.json(delivered.rows[0]);
@@ -266,18 +264,20 @@ ordersRouter.patch("/orders/:id/delivered", async (req, res) => {
   }
 });
 
-ordersRouter.get("/orders", async (_req, res) => {
-  const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
+ordersRouter.get("/orders", requireStoreAuth, async (req, res) => {
+  const result = await pool.query("SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC", [
+    req.storeId,
+  ]);
   res.json(result.rows);
 });
 
-ordersRouter.get("/orders/:id", async (req, res) => {
+ordersRouter.get("/orders/:id", identifyStoreOrCourier, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const order = await applyExpiry(client, req.params.id);
     await client.query("COMMIT");
-    if (!order) {
+    if (!order || (order.store_id !== req.storeId && order.courier_id !== req.courierId)) {
       return res.status(404).json({ error: "Bestelling niet gevonden" });
     }
     res.json(order);
@@ -290,7 +290,16 @@ ordersRouter.get("/orders/:id", async (req, res) => {
   }
 });
 
-ordersRouter.get("/orders/:id/history", async (req, res) => {
+ordersRouter.get("/orders/:id/history", identifyStoreOrCourier, async (req, res) => {
+  const order = await pool.query("SELECT store_id, courier_id FROM orders WHERE id = $1", [
+    req.params.id,
+  ]);
+  if (
+    order.rows.length === 0 ||
+    (order.rows[0].store_id !== req.storeId && order.rows[0].courier_id !== req.courierId)
+  ) {
+    return res.status(404).json({ error: "Bestelling niet gevonden" });
+  }
   const result = await pool.query(
     "SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY changed_at ASC",
     [req.params.id]
